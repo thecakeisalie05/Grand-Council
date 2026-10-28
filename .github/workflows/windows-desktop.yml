@@ -29,8 +29,9 @@ jobs:
       - name: Verify packaged executable
         shell: pwsh
         run: |
-          & .\dist\GrandCouncil\GrandCouncil.exe --self-test
-          if ($LASTEXITCODE -ne 0) { throw "Packaged executable self-test failed: $LASTEXITCODE" }
+          # GUI-subsystem executables do not reliably populate PowerShell's
+          # $LASTEXITCODE. Python subprocess explicitly waits for completion.
+          python -c 'import subprocess, sys; p = subprocess.run([r"dist\GrandCouncil\GrandCouncil.exe", "--self-test"], timeout=90); print("Packaged executable self-test exit code:", p.returncode); sys.exit(p.returncode)'
       - name: Package portable archive
         shell: pwsh
         run: |
