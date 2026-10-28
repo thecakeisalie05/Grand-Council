@@ -1,0 +1,49 @@
+name: Windows desktop
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  portable-windows:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+      - name: Install packaged app dependencies
+        run: python -m pip install --upgrade pip && python -m pip install ".[dev,desktop]"
+      - name: Run tests
+        run: python -m pytest -q
+      - name: Package desktop executable
+        shell: pwsh
+        run: |
+          pyinstaller --noconfirm --clean --windowed --onedir --name GrandCouncil --collect-all grand_council --collect-all PySide6 --collect-all uvicorn --collect-all huggingface_hub --copy-metadata huggingface-hub --hidden-import grand_council.desktop --hidden-import PySide6.QtWebEngineWidgets --hidden-import PySide6.QtWebEngineCore --hidden-import PySide6.QtWebEngineQuick desktop_entry.py
+      - name: Verify packaged executable
+        shell: pwsh
+        run: |
+          & .\dist\GrandCouncil\GrandCouncil.exe --self-test
+          if ($LASTEXITCODE -ne 0) { throw "Packaged executable self-test failed: $LASTEXITCODE" }
+      - name: Package portable archive
+        shell: pwsh
+        run: |
+          Compress-Archive -Path dist\GrandCouncil -DestinationPath GrandCouncil-Windows-x64.zip -CompressionLevel Optimal
+      - uses: actions/upload-artifact@v4
+        with:
+          name: GrandCouncil-Windows-x64
+          path: GrandCouncil-Windows-x64.zip
+          if-no-files-found: error
+      - name: Publish tagged release
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: pwsh
+        run: |
+          gh release create "${{ github.ref_name }}" GrandCouncil-Windows-x64.zip --title "Grand Council ${{ github.ref_name }}" --generate-notes
